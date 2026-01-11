@@ -7,51 +7,53 @@ import numpy as np
 from datetime import datetime
 
 # Настройки
-DATA_FILE = 'data/brent_oil_data.csv'
+OIL_FILE = 'data/brent_oil_data.csv'
+SP_FILE = 'data/sp500_data.csv'
 OUTPUT_DIR = 'output'
 
 def make_analysis():
-    if not os.path.exists(DATA_FILE):
-        print(f"❌ Файл {DATA_FILE} не найден!")
+    if not os.path.exists(OIL_FILE) or not os.path.exists(SP_FILE):
+        print("❌ Данные не найдены. Сначала запусти download_data.py")
         return
 
-    # Загрузка и подготовка данных
-    df = pd.read_csv(DATA_FILE)
+    # 1. Загрузка и объединение (Merge)
+    oil = pd.read_csv(OIL_FILE)[['Date', 'Close']].rename(columns={'Close': 'Oil_Price'})
+    sp = pd.read_csv(SP_FILE)[['Date', 'Close']].rename(columns={'Close': 'SP500_Index'})
+    df = pd.merge(oil, sp, on='Date')
     df['Date'] = pd.to_datetime(df['Date'])
-    df = df.sort_values('Date')
 
-    # Расчет метрик (как в вашем курсе по Pandas)
-    df['MA20'] = df['Close'].rolling(window=20).mean()
-    df['MA50'] = df['Close'].rolling(window=50).mean()
+    # 2. Расчет корреляции
+    corr_value = df['Oil_Price'].corr(df['SP500_Index'])
+    print(f"\n📊 Связь (корреляция) Нефть vs S&P500: {corr_value:.2f}")
 
-    # Построение графика
-    print("📊 Строю графики...")
+    # 3. График №1: Тренды и прогноз (то, что мы уже делали)
+    print("📈 Обновляю основной график...")
+    oil_df = pd.read_csv(OIL_FILE)
+    oil_df['Date'] = pd.to_datetime(oil_df['Date'])
+    oil_df['MA20'] = oil_df['Close'].rolling(window=20).mean()
+    oil_df['MA50'] = oil_df['Close'].rolling(window=50).mean()
+    
     plt.figure(figsize=(12, 6))
     sns.set_style("whitegrid")
-    
-    plt.plot(df['Date'], df['Close'], label='Цена Brent', alpha=0.5, color='blue')
-    plt.plot(df['Date'], df['MA20'], label='Тренд 20 дней', color='orange')
-    plt.plot(df['Date'], df['MA50'], label='Тренд 50 дней', color='red')
-    
-    plt.title('Анализ цен на нефть Brent (2020-2026)', fontsize=15)
-    plt.xlabel('Дата')
-    plt.ylabel('Цена ($)')
+    plt.plot(oil_df['Date'], oil_df['Close'], label='Цена Brent', alpha=0.4, color='blue')
+    plt.plot(oil_df['Date'], oil_df['MA20'], label='Тренд 20 дней', color='orange')
+    plt.plot(oil_df['Date'], oil_df['MA50'], label='Тренд 50 дней', color='red')
+    plt.title('Динамика цен на нефть Brent (2020-2026)')
     plt.legend()
+    plt.savefig(os.path.join(OUTPUT_DIR, 'oil_analysis_chart.png'))
 
-    # Сохранение результата
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    # 4. График №2: Корреляция (Новый!)
+    print("📊 Создаю график сравнения...")
+    plt.figure(figsize=(10, 6))
+    sns.regplot(data=df, x='SP500_Index', y='Oil_Price', 
+                scatter_kws={'alpha':0.3, 'color':'teal'}, 
+                line_kws={'color':'red', 'label':'Линия тренда'})
+    plt.title(f'Корреляция цен: Нефть vs S&P500 (Коэффициент: {corr_value:.2f})')
+    plt.xlabel('Индекс S&P 500 (Состояние экономики)')
+    plt.ylabel('Цена нефти Brent ($)')
+    plt.savefig(os.path.join(OUTPUT_DIR, 'oil_sp500_correlation.png'))
     
-    chart_path = os.path.join(OUTPUT_DIR, 'oil_analysis_chart.png')
-    plt.savefig(chart_path)
-    print(f"✅ График успешно сохранен: {chart_path}")
-
-    # Мини-прогноз
-    X = np.array(range(len(df))).reshape(-1, 1)
-    y = df['Close'].values
-    model = LinearRegression().fit(X, y)
-    future_price = model.predict([[len(df) + 30]])
-    print(f"🔮 Линейный прогноз на месяц: ~${future_price[0]:.2f}")
+    print(f"✅ Готово! Все графики в папке {OUTPUT_DIR}")
 
 if __name__ == "__main__":
     make_analysis()
